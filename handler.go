@@ -1,3 +1,4 @@
+// Package httpzip provides a HTTP handler to serve multiple files in a ZIP stream.
 package httpzip
 
 import (
@@ -9,6 +10,7 @@ import (
 	"time"
 )
 
+// Handler serves multiple files in uncompressed ZIP.
 type Handler struct {
 	archiveName string
 	tmp         *zip.Writer
@@ -29,6 +31,7 @@ func (c *countingWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// NewHandler creates an instance of Handler.
 func NewHandler(archiveName string) *Handler {
 	h := &Handler{}
 	h.archiveName = archiveName
@@ -42,6 +45,7 @@ func NewHandler(archiveName string) *Handler {
 	return h
 }
 
+// FileSource describes archive entry.
 type FileSource struct {
 	Path     string
 	Modified time.Time
@@ -51,6 +55,7 @@ type FileSource struct {
 
 var tenK = make([]byte, 10000)
 
+// AddFile add a file to the archive.
 func (h *Handler) AddFile(fs FileSource) error {
 	f, err := h.tmp.CreateHeader(&zip.FileHeader{
 		Name:     fs.Path,
@@ -86,6 +91,7 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, _ *http.Request) {
 	if !h.closed {
 		if err := h.tmp.Close(); err != nil {
 			h.OnError(err)
+
 			return
 		}
 
@@ -114,11 +120,13 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, _ *http.Request) {
 		})
 		if err != nil {
 			h.OnError(err)
+
 			return
 		}
 
 		if err := src.Data(f); err != nil {
 			h.OnError(err)
+
 			return
 		}
 	}
