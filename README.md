@@ -7,7 +7,7 @@
 ![Code lines](https://sloc.xyz/github/vearutop/httpzip/?category=code)
 ![Comments](https://sloc.xyz/github/vearutop/httpzip/?category=comments)
 
-Serve multiple files in uncompressed ZIP stream with progress status.
+Serve multiple files in uncompressed ZIP stream (no temporary archive file) with progress (`Content-Length` header) status.
 
 ```go
 h := httpzip.NewHandler("archive")
@@ -33,4 +33,47 @@ for i := 0; i < 10; i++ {
 }
 
 h.ServeHTTP(rw, nil)
+```
+
+Extract ZIP file directly (no temporary archive file) from a URL.
+
+```go
+resp, err := http.Get("https://www.example.com/archive.zip")
+if err != nil {
+    log.Fatal(err)
+}
+defer resp.Body.Close()
+
+zr := httpzip.NewStreamReader(resp.Body)
+
+for {
+    e, err := zr.Next()
+    if err == io.EOF {
+        break
+    }
+
+    if err != nil {
+        log.Fatalf("failed to find next file in zip: %s", err)
+    }
+
+    log.Println("file path:", e.Name)
+
+    if !e.IsDir() {
+        rc, err := e.Open()
+        if err != nil {
+            log.Fatalf("unable to open zip file entry: %s", err)
+        }
+
+        w, err := io.Copy(io.Discard, rc)
+        if err != nil {
+            log.Fatalf("unable to stream zip file: %s (%d)", err, w)
+        }
+
+        log.Println("file length:", w)
+
+        if err := rc.Close(); err != nil {
+            log.Fatalf("failed to close zip file entry: %s", err)
+        }
+    }
+}
 ```

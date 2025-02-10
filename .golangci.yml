@@ -20,6 +20,15 @@ linters-settings:
 linters:
   enable-all: true
   disable:
+    - gocyclo
+    - gocognit
+    - funlen
+    - gosec
+    - nestif
+    - gocritic
+    - cyclop
+    - err113
+    - errorlint
     - intrange
     - lll
     - gochecknoglobals

@@ -50,6 +50,7 @@ type FileSource struct {
 	Path     string
 	Modified time.Time
 	Size     int64
+	CRC32    uint32 // CRC32 checksum of the file content, optional.
 	Data     func(w io.Writer) error
 }
 
@@ -57,10 +58,13 @@ var tenK = make([]byte, 10000)
 
 // AddFile add a file to the archive.
 func (h *Handler) AddFile(fs FileSource) error {
-	f, err := h.tmp.CreateHeader(&zip.FileHeader{
-		Name:     fs.Path,
-		Method:   zip.Store,
-		Modified: fs.Modified,
+	f, err := h.tmp.CreateRaw(&zip.FileHeader{
+		Name:               fs.Path,
+		Method:             zip.Store,
+		Modified:           fs.Modified,
+		CompressedSize64:   uint64(fs.Size),
+		UncompressedSize64: uint64(fs.Size),
+		CRC32:              fs.CRC32,
 	})
 	if err != nil {
 		return err
@@ -113,10 +117,13 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, _ *http.Request) {
 	}()
 
 	for _, src := range h.sources {
-		f, err := w.CreateHeader(&zip.FileHeader{
-			Name:     src.Path,
-			Method:   zip.Store,
-			Modified: src.Modified,
+		f, err := w.CreateRaw(&zip.FileHeader{
+			Name:               src.Path,
+			Method:             zip.Store,
+			Modified:           src.Modified,
+			CompressedSize64:   uint64(src.Size),
+			UncompressedSize64: uint64(src.Size),
+			CRC32:              src.CRC32,
 		})
 		if err != nil {
 			h.OnError(err)
