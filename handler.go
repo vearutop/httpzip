@@ -20,7 +20,8 @@ type Handler struct {
 	sources     []FileSource
 
 	OnError     func(err error)
-	IgnoreCRC32 bool
+	Streamable  bool // Use inlined raw file headers instead of final directory to allow streaming decoding.
+	IgnoreCRC32 bool // Allow streamable ZIP with empty CRC32.
 }
 
 type countingWriter struct {
@@ -76,20 +77,34 @@ var tenK = make([]byte, 10000)
 
 // AddFile add a file to the archive.
 func (h *Handler) AddFile(fs FileSource) error {
-	if fs.CRC32 == 0 && !h.IgnoreCRC32 {
-		if err := fs.FillCRC32(); err != nil {
-			return err
+	var (
+		f   io.Writer
+		err error
+	)
+
+	if h.Streamable {
+		if fs.CRC32 == 0 && !h.IgnoreCRC32 {
+			if err := fs.FillCRC32(); err != nil {
+				return err
+			}
 		}
+
+		f, err = h.tmp.CreateRaw(&zip.FileHeader{
+			Name:               fs.Path,
+			Method:             zip.Store,
+			Modified:           fs.Modified,
+			CompressedSize64:   uint64(fs.Size),
+			UncompressedSize64: uint64(fs.Size),
+			CRC32:              fs.CRC32,
+		})
+	} else {
+		f, err = h.tmp.CreateHeader(&zip.FileHeader{
+			Name:     fs.Path,
+			Method:   zip.Store,
+			Modified: fs.Modified,
+		})
 	}
 
-	f, err := h.tmp.CreateRaw(&zip.FileHeader{
-		Name:               fs.Path,
-		Method:             zip.Store,
-		Modified:           fs.Modified,
-		CompressedSize64:   uint64(fs.Size),
-		UncompressedSize64: uint64(fs.Size),
-		CRC32:              fs.CRC32,
-	})
 	if err != nil {
 		return err
 	}
@@ -140,15 +155,29 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, _ *http.Request) {
 		}
 	}()
 
+	var (
+		f   io.Writer
+		err error
+	)
+
 	for _, src := range h.sources {
-		f, err := w.CreateRaw(&zip.FileHeader{
-			Name:               src.Path,
-			Method:             zip.Store,
-			Modified:           src.Modified,
-			CompressedSize64:   uint64(src.Size),
-			UncompressedSize64: uint64(src.Size),
-			CRC32:              src.CRC32,
-		})
+		if h.Streamable {
+			f, err = w.CreateRaw(&zip.FileHeader{
+				Name:               src.Path,
+				Method:             zip.Store,
+				Modified:           src.Modified,
+				CompressedSize64:   uint64(src.Size),
+				UncompressedSize64: uint64(src.Size),
+				CRC32:              src.CRC32,
+			})
+		} else {
+			f, err = w.CreateHeader(&zip.FileHeader{
+				Name:     src.Path,
+				Method:   zip.Store,
+				Modified: src.Modified,
+			})
+		}
+
 		if err != nil {
 			h.OnError(err)
 
