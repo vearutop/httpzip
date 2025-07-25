@@ -4,6 +4,7 @@ package httpzip
 import (
 	"archive/zip"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"net/http"
 	"strconv"
@@ -18,7 +19,8 @@ type Handler struct {
 	totalBytes  *countingWriter
 	sources     []FileSource
 
-	OnError func(err error)
+	OnError     func(err error)
+	IgnoreCRC32 bool
 }
 
 type countingWriter struct {
@@ -54,10 +56,32 @@ type FileSource struct {
 	Data     func(w io.Writer) error
 }
 
+// FillCRC32 counts CRC32 if it is empty.
+func (fs *FileSource) FillCRC32() error {
+	if fs.CRC32 != 0 {
+		return nil
+	}
+
+	c := crc32.NewIEEE()
+	if err := fs.Data(c); err != nil {
+		return err
+	}
+
+	fs.CRC32 = c.Sum32()
+
+	return nil
+}
+
 var tenK = make([]byte, 10000)
 
 // AddFile add a file to the archive.
 func (h *Handler) AddFile(fs FileSource) error {
+	if fs.CRC32 == 0 && !h.IgnoreCRC32 {
+		if err := fs.FillCRC32(); err != nil {
+			return err
+		}
+	}
+
 	f, err := h.tmp.CreateRaw(&zip.FileHeader{
 		Name:               fs.Path,
 		Method:             zip.Store,
