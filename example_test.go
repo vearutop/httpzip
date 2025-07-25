@@ -15,6 +15,7 @@ func ExampleNewHandler() {
 	rw := httptest.NewRecorder()
 
 	h := httpzip.NewHandler("archive")
+	h.Streamable = true
 	h.OnError = func(err error) {
 		log.Println(err)
 	}
